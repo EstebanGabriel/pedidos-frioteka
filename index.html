@@ -83,6 +83,7 @@ details.ped li{margin:3px 0}
 .btn.wa{background:#1f9d55;border-color:#1f9d55;color:#fff}
 .hbtn.del{color:var(--muted);margin-left:12px}
 .delq{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px;font-size:13px}
+.ordsel{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin-left:auto}.ordsel select{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
 </style>
 </head>
 <body>
@@ -152,7 +153,7 @@ window.dispatchEvent(new Event("fb-ready"));
 </script>
 <script>
 (function(){
-  var S={tels:{},ocultos:{},delProd:null,verOcultos:false,view:"lista",prov:null,q:"",provs:{},pedidos:[],draft:{},extras:[],nota:"",ready:false,canSave:true,names:{},delAsk:null,histOpen:{}};
+  var S={orden:(function(){try{return localStorage.getItem("orden")||"az"}catch(e){return "az"}})(),tels:{},ocultos:{},delProd:null,verOcultos:false,view:"lista",prov:null,q:"",provs:{},pedidos:[],draft:{},extras:[],nota:"",ready:false,canSave:true,names:{},delAsk:null,histOpen:{}};
   var db=null,user=null,uid=null;
   var $=function(id){return document.getElementById(id)};
   var esc=function(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})};
@@ -203,11 +204,17 @@ window.dispatchEvent(new Event("fb-ready"));
     var r='';h.slice().reverse().forEach(function(e,i,arr){var prev=arr[i+1];var v=prev&&prev.precio?(e.precio-prev.precio)/prev.precio:0;
       r+='<div><span>'+fecha(e.fecha)+'</span><span class="num">'+money(e.precio)+(Math.abs(v)>=0.005?' <span class="var '+(v>0?'up':'down')+'">'+pct(v)+'</span>':'')+'</span></div>'});
     return '<div class="hist">'+r+'</div>'}
+  function consumo(x){var c=0;S.pedidos.forEach(function(o){if(o.prov!==S.prov)return;(o.items||[]).forEach(function(l){if(l.nombre===x.nombre)c+=Number(l.cant)||0})});return c}
+  function ordenar(ps){var m=S.orden||"az";var a=ps.slice();
+    if(m==="az")a.sort(function(x,y){return x.nombre.localeCompare(y.nombre,"es")});
+    else if(m==="consumo"){var k={};a.forEach(function(x){k[x.id]=[consumo(x),(Number(x.habitual)||0)*(Number(x.precio)||0)]});
+      a.sort(function(x,y){var p=k[x.id],q=k[y.id];return (q[0]-p[0])||(q[1]-p[1])||x.nombre.localeCompare(y.nombre,"es")})}
+    return a}
   function vProv(){
     var p=S.provs[S.prov];if(!p)return '<div class="empty">Ese proveedor ya no está en la lista.</div>';
     var h='<div class="bar"><button class="btn small" data-act="volver">‹ Proveedores</button></div><div><h2>'+esc(p.nombre)+'</h2><p class="sub">'+esc(p.rubro||"")+(p.nota?' · '+esc(p.nota):'')+'</p></div>';
-    var ps=prods();
-    if(ps.length)h+='<div class="bar"><button class="btn small" data-act="habitual">Cargar lo habitual</button><button class="btn small" data-act="vaciar">Vaciar</button></div><p class="sub">Si contás lo que queda, anotalo en "Hay" y la sugerencia pide solo lo que falta.</p>';
+    var ps=ordenar(prods());
+    if(ps.length)h+='<div class="bar"><button class="btn small" data-act="habitual">Cargar lo habitual</button><button class="btn small" data-act="vaciar">Vaciar</button><label class="ordsel">Ordenar <select id="orden"><option value="az"'+(S.orden==="az"?' selected':'')+'>A → Z</option><option value="consumo"'+(S.orden==="consumo"?' selected':'')+'>Mayor consumo</option><option value="factura"'+(S.orden==="factura"?' selected':'')+'>Como en la factura</option></select></label></div><p class="sub">Si contás lo que queda, anotalo en "Hay" y la sugerencia pide solo lo que falta.</p>';
     else h+='<div class="note">De este proveedor todavía no hay productos cargados. Agregalos a mano acá abajo.</div>';
     h+='<div class="list">';
     ps.forEach(function(x){var d=S.draft[x.id]||{};var c=Number(d.cant)||0;var sg=sugerido(x);
@@ -293,6 +300,7 @@ window.dispatchEvent(new Event("fb-ready"));
   document.addEventListener("input",function(ev){
     var t=ev.target;
     if(t.id==="buscar"){S.q=t.value;var pos=t.selectionStart;render();var n=$("buscar");n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}return}
+    if(t.id==="orden"){S.orden=t.value;try{localStorage.setItem("orden",t.value)}catch(e){}render();return}
     if(t.id==="nota"){S.nota=t.value;saveDraft();$("msg").value=mensaje(lineas());return}
     var row=t.closest("[data-p]");if(!row)return;var pid=row.dataset.p;
     if(t.dataset.f==="cant"){S.draft[pid]=S.draft[pid]||{};S.draft[pid].cant=Math.max(0,Number(t.value)||0);saveDraft();refreshRow(row,pid)}
