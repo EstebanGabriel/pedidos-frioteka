@@ -29,7 +29,7 @@ function mostrarPantalla(auth, color, titulo) {
   w.innerHTML = `
 <style>
 #frio-login{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;
-  background:#f6f6f4;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1b1b1b}
+  background:#f8f3f3;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1b1b1b;color-scheme:light}
 #frio-login form{width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px}
 #frio-login h1{margin:0 0 4px;font-size:26px;font-weight:800;color:${color};text-align:center;letter-spacing:.5px}
 #frio-login p{margin:0 0 12px;font-size:14px;color:#666;text-align:center}
@@ -39,8 +39,6 @@ function mostrarPantalla(auth, color, titulo) {
 #frio-login button{margin-top:6px;padding:15px;font-size:16px;font-weight:700;border:none;border-radius:12px;background:${color};color:#fff;cursor:pointer}
 #frio-login button:disabled{opacity:.6}
 #frio-login .err{min-height:18px;font-size:14px;color:#b3261e;text-align:center}
-@media (prefers-color-scheme:dark){#frio-login{background:#151515;color:#eee}#frio-login p,#frio-login label{color:#aaa}
-  #frio-login input{background:#222;border-color:#444;color:#eee}}
 </style>
 <form autocomplete="on">
   <h1>${titulo}</h1>
