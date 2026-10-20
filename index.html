@@ -79,6 +79,7 @@ details.ped li{margin:3px 0}
 .btn.wa{background:#1f9d55;border-color:#1f9d55;color:#fff}
 .hbtn.del{color:var(--muted);margin-left:12px}
 .delq{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px;font-size:13px}
+.mm{font-size:13px;font-weight:600;color:var(--warn);margin-top:2px}.mm.ok{color:var(--ok)}.mm .bar2{height:6px;border-radius:3px;background:var(--line);margin-top:4px;overflow:hidden}.mm .bar2 i{display:block;height:100%;background:currentColor}
 .ordsel{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin-left:auto}.ordsel select{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
 </style>
 </head>
@@ -97,7 +98,7 @@ details.ped li{margin:3px 0}
   <main id="main"><div class="empty">Cargando proveedores…</div></main>
 </div>
 <div class="foot" id="foot" hidden><div class="in">
-  <div class="tot"><div class="sub" id="foot-n"></div><b class="num" id="foot-t"></b></div>
+  <div class="tot"><div class="sub" id="foot-n"></div><b class="num" id="foot-t"></b><div class="mm" id="foot-m" hidden></div></div>
   <button class="btn primary" id="foot-b" data-act="resumen">Ver pedido</button>
 </div></div>
 <div class="toast" id="toast" hidden></div>
@@ -170,6 +171,14 @@ window.dispatchEvent(new Event("fb-ready"));
   function sugerido(p){var d=S.draft[p.id]||{};var h=Number(p.habitual)||0;if(d.stock!==undefined&&d.stock!==""&&!isNaN(d.stock))return Math.max(0,Math.round((h-Number(d.stock))*100)/100);return h}
   function lineas(){var out=[];prods().forEach(function(p){var c=Number((S.draft[p.id]||{}).cant)||0;if(c>0)out.push({nombre:p.nombre,unidad:p.unidad||"",cant:c,precio:Number(p.precio)||0,cod:p.cod||""})});
     S.extras.forEach(function(e){if(e.nombre&&Number(e.cant)>0)out.push({nombre:e.nombre,unidad:"",cant:Number(e.cant),precio:0,cod:"",extra:true})});return out}
+  // Escalones de Maxiconsumo: productos DISTINTOS de Marolio, Molto, Esencial y Santa Isabel (70 y 120)
+  var MARCAS=/(MAROLIO|MOLTO|ESENCIAL|STA\.? ?ISABEL|SANTA ISABEL)/i;
+  function esMaxi(){var p=S.provs[S.prov];return !!(p&&/maxiconsumo/i.test(p.nombre))}
+  function marcasMaxi(){if(!esMaxi())return null;var n=0,vis={};
+    prods().forEach(function(x){if((Number((S.draft[x.id]||{}).cant)||0)>0&&MARCAS.test(x.nombre)){var k=x.cod||x.nombre;if(!vis[k]){vis[k]=1;n++}}});
+    S.extras.forEach(function(e){if(Number(e.cant)>0&&MARCAS.test(e.nombre||""))n++});return n}
+  function marcasHTML(n){var next=n<70?70:(n<120?120:0);var pct=Math.min(100,Math.round(n/(next||120)*100));
+    return 'Marolio · Molto · Esencial · Sta. Isabel: <span class="num">'+n+'</span> distintos'+(next?' · faltan <span class="num">'+(next-n)+'</span> para '+next:' · llegaste a 120')+'<div class="bar2"><i style="width:'+pct+'%"></i></div>'}
   function total(ls){return ls.reduce(function(a,l){return a+l.cant*l.precio},0)}
   function ultimoPedido(id){for(var i=0;i<S.pedidos.length;i++)if(S.pedidos[i].prov===id)return S.pedidos[i];return null}
 
@@ -181,7 +190,8 @@ window.dispatchEvent(new Event("fb-ready"));
   }
   function foot(){var f=$("foot");if(S.view!=="prov"){f.hidden=true;return}
     var ls=lineas();f.hidden=false;$("foot-n").textContent=ls.length?ls.length+(ls.length===1?" producto":" productos")+" en el pedido":"Todavía no agregaste productos";
-    $("foot-t").textContent="Total estimado "+money(total(ls));$("foot-b").disabled=!ls.length}
+    $("foot-t").textContent="Total estimado "+money(total(ls));$("foot-b").disabled=!ls.length;
+    var fm=$("foot-m"),mn=marcasMaxi();if(mn===null){fm.hidden=true}else{fm.hidden=false;fm.className="mm"+(mn>=70?" ok":"");fm.innerHTML=marcasHTML(mn)}}
 
   function vLista(){
     if(!S.ready)return '<div class="empty">Cargando proveedores…</div>';
@@ -212,7 +222,7 @@ window.dispatchEvent(new Event("fb-ready"));
     var p=S.provs[S.prov];if(!p)return '<div class="empty">Ese proveedor ya no está en la lista.</div>';
     var h='<div class="bar"><button class="btn small" data-act="volver">‹ Proveedores</button></div><div><h2>'+esc(p.nombre)+'</h2><p class="sub">'+esc(p.rubro||"")+(p.nota?' · '+esc(p.nota):'')+'</p></div>';
     var ps=ordenar(prods());
-    if(ps.length)h+='<div class="bar"><button class="btn small" data-act="habitual">Cargar lo habitual</button><button class="btn small" data-act="vaciar">Vaciar</button><label class="ordsel">Ordenar <select id="orden"><option value="az"'+(S.orden==="az"?' selected':'')+'>A → Z</option><option value="consumo"'+(S.orden==="consumo"?' selected':'')+'>Mayor consumo</option><option value="factura"'+(S.orden==="factura"?' selected':'')+'>Como en la factura</option></select></label></div><p class="sub">Si contás lo que queda, anotalo en "Hay" y la sugerencia pide solo lo que falta.</p>';
+    if(ps.length)h+='<div class="bar"><button class="btn small" data-act="habitual">Cargar lo habitual</button><button class="btn small" data-act="vaciar">Vaciar</button><label class="ordsel">Ordenar <select id="orden"><option value="az"'+(S.orden==="az"?' selected':'')+'>A → Z</option><option value="consumo"'+(S.orden==="consumo"?' selected':'')+'>Mayor consumo</option><option value="factura"'+(S.orden==="factura"?' selected':'')+'>Como en la factura</option></select></label></div><p class="sub">Si contás lo que queda, anotalo en "Hay" y la sugerencia pide solo lo que falta.</p>'+(esMaxi()?'<div class="note">Escalones Maxiconsumo: con más de 70 productos distintos de Marolio, Molto, Esencial y Santa Isabel hay descuento y precio mayorista; el próximo escalón es 120. El contador está abajo, junto al total.</div>':'');
     else h+='<div class="note">De este proveedor todavía no hay productos cargados. Agregalos a mano acá abajo.</div>';
     h+='<div class="list">';
     ps.forEach(function(x){var d=S.draft[x.id]||{};var c=Number(d.cant)||0;var sg=sugerido(x);
@@ -232,7 +242,7 @@ window.dispatchEvent(new Event("fb-ready"));
     if(S.nota.trim())t+="\n"+S.nota.trim()+"\n";return t+"\nGracias!"}
   function vResumen(){
     var p=S.provs[S.prov],ls=lineas();
-    var h='<div class="bar"><button class="btn small" data-act="editar">‹ Seguir editando</button></div><div><h2>Pedido para '+esc(p?p.nombre:"")+'</h2><p class="sub num">'+ls.length+(ls.length===1?" producto":" productos")+' · total estimado '+money(total(ls))+' (a los últimos precios cargados)</p></div>';
+    var h='<div class="bar"><button class="btn small" data-act="editar">‹ Seguir editando</button></div><div><h2>Pedido para '+esc(p?p.nombre:"")+'</h2><p class="sub num">'+ls.length+(ls.length===1?" producto":" productos")+' · total estimado '+money(total(ls))+' (a los últimos precios cargados)</p>'+(function(){var mn=marcasMaxi();return mn===null?'':'<div class="mm'+(mn>=70?' ok':'')+'">'+marcasHTML(mn)+'</div>'})()+'</div>';
     h+='<div class="list">';ls.forEach(function(l){h+='<div class="prod"><div class="ctrl"><span class="name" style="flex:1;min-width:0">'+esc(l.nombre)+'</span><span class="num">'+qty(l.cant)+' '+esc(l.unidad)+'</span><span class="sum num">'+(l.precio?money(l.cant*l.precio):'')+'</span></div></div>'});h+='</div>';
     h+='<div><p class="sub" style="margin-bottom:6px">Aclaración para el proveedor (opcional)</p><textarea id="nota" placeholder="Ej.: entregar el jueves a la mañana">'+esc(S.nota)+'</textarea></div>';
     h+='<div><p class="sub" style="margin-bottom:6px">Mensaje para mandar por WhatsApp</p><textarea class="msg" id="msg" readonly>'+esc(mensaje(ls))+'</textarea></div>';
