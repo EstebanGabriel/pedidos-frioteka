@@ -127,6 +127,11 @@ window.FB = {
   mostrarTodos(prov){ return setDoc(doc(db, "pp_ocultos", prov), { ids: [] }); },
   onTelefonos(cb){ onSnapshot(collection(db, "pp_telefonos"), snap => { const m = {}; snap.forEach(d => { m[d.id] = (d.data()||{}).tel || ""; }); cb(m); }, ()=>{}); },
   setTel(id, tel){ return setDoc(doc(db, "pp_telefonos", id), { tel }); },
+  // Pedido sugerido por Compras almacén (sale de _CIRCUITO\PEDIDOS). Un documento por proveedor.
+  onSugeridos(cb){ onSnapshot(collection(db, "pp_sugeridos"), snap => { const m = {}; snap.forEach(d => { m[d.id] = d.data() || {}; }); cb(m); }, ()=>{}); },
+  // Usado por Claude: {slug:{fecha, archivo, items:[{cod, nombre, cant, nota}]}}
+  async cargarSugeridos(map){ const b = writeBatch(db); Object.keys(map).forEach(id => b.set(doc(db, "pp_sugeridos", id), map[id])); await b.commit(); return Object.keys(map).length; },
+  borrarSugerido(id){ return deleteDoc(doc(db, "pp_sugeridos", id)); },
   onProveedores(cb, err){
     onSnapshot(META, s => { meta = s.exists() ? s.data() : null; cb(provs, meta); }, ()=>{});
     onSnapshot(collection(db, PROV), snap => { const m = {}; snap.forEach(d => { const x = d.data(); if (x && x.nombre) m[d.id] = x; }); provs = m; cb(provs, meta); }, err);
@@ -152,7 +157,7 @@ window.dispatchEvent(new Event("fb-ready"));
 </script>
 <script>
 (function(){
-  var S={orden:(function(){try{return localStorage.getItem("orden")||"az"}catch(e){return "az"}})(),tels:{},ocultos:{},delProd:null,verOcultos:false,view:"lista",prov:null,q:"",provs:{},pedidos:[],draft:{},extras:[],nota:"",ready:false,canSave:true,names:{},delAsk:null,histOpen:{}};
+  var S={orden:(function(){try{return localStorage.getItem("orden")||"az"}catch(e){return "az"}})(),tels:{},ocultos:{},delProd:null,verOcultos:false,view:"lista",prov:null,q:"",provs:{},pedidos:[],draft:{},extras:[],nota:"",ready:false,canSave:true,names:{},delAsk:null,histOpen:{},sugs:{}};
   var db=null,user=null,uid=null;
   var $=function(id){return document.getElementById(id)};
   var esc=function(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})};
@@ -168,6 +173,12 @@ window.dispatchEvent(new Event("fb-ready"));
 
   function ocultosDe(id){return S.ocultos[id]||[]}
   function prods(){var p=S.provs[S.prov];var o=ocultosDe(S.prov);return ((p&&p.productos)||[]).filter(function(x){return o.indexOf(x.id)<0})}
+  function norm(s){return String(s||"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9]+/g," ").trim()}
+  function sugDe(id){var s=S.sugs[id];return s&&s.items&&s.items.length?s:null}
+  function cargarSug(){var s=sugDe(S.prov);if(!s)return;var ps=prods();S.draft={};S.extras=[];var n=0,e=0;
+    s.items.forEach(function(l){var c=Number(l.cant)||0;if(!(c>0))return;var m=ps.filter(function(p){return (l.cod&&p.cod&&String(p.cod).replace(/^0+/,"")===String(l.cod).replace(/^0+/,""))})[0]||ps.filter(function(p){return norm(p.nombre)===norm(l.nombre)})[0];
+      if(m){S.draft[m.id]={cant:c};n++}else{S.extras.push({nombre:l.nombre,cant:c});e++}});
+    saveDraft();render();toast("Pedido sugerido cargado: "+n+" de la lista"+(e?" y "+e+" agregados aparte":""))}
   function sugerido(p){var d=S.draft[p.id]||{};var h=Number(p.habitual)||0;if(d.stock!==undefined&&d.stock!==""&&!isNaN(d.stock))return Math.max(0,Math.round((h-Number(d.stock))*100)/100);return h}
   function lineas(){var out=[];prods().forEach(function(p){var c=Number((S.draft[p.id]||{}).cant)||0;if(c>0)out.push({nombre:p.nombre,unidad:p.unidad||"",cant:c,precio:Number(p.precio)||0,cod:p.cod||""})});
     S.extras.forEach(function(e){if(e.nombre&&Number(e.cant)>0)out.push({nombre:e.nombre,unidad:"",cant:Number(e.cant),precio:0,cod:"",extra:true})});return out}
@@ -222,6 +233,7 @@ window.dispatchEvent(new Event("fb-ready"));
     var p=S.provs[S.prov];if(!p)return '<div class="empty">Ese proveedor ya no está en la lista.</div>';
     var h='<div class="bar"><button class="btn small" data-act="volver">‹ Proveedores</button></div><div><h2>'+esc(p.nombre)+'</h2><p class="sub">'+esc(p.rubro||"")+(p.nota?' · '+esc(p.nota):'')+'</p></div>';
     var ps=ordenar(prods());
+    var sg0=sugDe(S.prov);if(sg0)h+='<div class="note">Compras almacén dejó un pedido sugerido'+(sg0.fecha?' del '+esc(fecha(sg0.fecha)):'')+' ('+sg0.items.length+(sg0.items.length===1?' producto':' productos')+'). <button class="btn small" data-act="cargar-sug">Cargar pedido sugerido</button></div>';
     if(ps.length)h+='<div class="bar"><button class="btn small" data-act="habitual">Cargar lo habitual</button><button class="btn small" data-act="vaciar">Vaciar</button><label class="ordsel">Ordenar <select id="orden"><option value="az"'+(S.orden==="az"?' selected':'')+'>A → Z</option><option value="consumo"'+(S.orden==="consumo"?' selected':'')+'>Mayor consumo</option><option value="factura"'+(S.orden==="factura"?' selected':'')+'>Como en la factura</option></select></label></div><p class="sub">Si contás lo que queda, anotalo en "Hay" y la sugerencia pide solo lo que falta.</p>'+(esMaxi()?'<div class="note">Escalones Maxiconsumo: con más de 70 productos distintos de Marolio, Molto, Esencial y Santa Isabel hay descuento y precio mayorista; el próximo escalón es 120. El contador está abajo, junto al total.</div>':'');
     else h+='<div class="note">De este proveedor todavía no hay productos cargados. Agregalos a mano acá abajo.</div>';
     h+='<div class="list">';
@@ -287,6 +299,7 @@ window.dispatchEvent(new Event("fb-ready"));
     else if(a==="hist"){S.histOpen[pid]=!S.histOpen[pid];var y=window.scrollY;render();window.scrollTo(0,y)}
     else if(a==="sug"){var x=prods().filter(function(p){return p.id===pid})[0];setCant(pid,sugerido(x));refreshRow(row,pid)}
     else if(a==="habitual"){prods().forEach(function(x){setCant(x.id,sugerido(x))});render()}
+    else if(a==="cargar-sug"){cargarSug()}
     else if(a==="vaciar"){S.draft={};S.extras=[];saveDraft();render()}
     else if(a==="add-extra"){var n=$("ex-n").value.trim(),c=Number($("ex-c").value);if(!n||!(c>0)){toast("Escribí el producto y la cantidad");return}S.extras.push({nombre:n,cant:c});saveDraft();render()}
     else if(a==="quitar-extra"){S.extras.splice(Number(b.dataset.i),1);saveDraft();render()}
@@ -334,6 +347,7 @@ window.dispatchEvent(new Event("fb-ready"));
         function(){S.ready=true;aviso("No se pudieron cargar los precios. Revisá la conexión y recargá la página.");render()});
       F.onOcultos(function(m){S.ocultos=m;if(S.view==="prov")render()});
       F.onTelefonos(function(m){S.tels=m});
+      if(F.onSugeridos)F.onSugeridos(function(m){S.sugs=m;if(S.view==="prov")render()});
       F.onPedidos(function(arr){S.pedidos=arr;if(S.view==="hist"||S.view==="lista")render()},function(){});
     };
     if(window.FB)go();else{window.addEventListener("fb-ready",go,{once:true});setTimeout(function(){if(!window.FB){S.ready=true;aviso("No hay conexión. Revisá internet y recargá la página.");render()}},12000)}
